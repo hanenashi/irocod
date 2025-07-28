@@ -1,0 +1,176 @@
+<!-- <<HEAD BLOCK START>> -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Code Chunk Editor (Debug+Paste+CopyAll)</title>
+
+  <!-- CodeMirror 5 CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/eclipse.min.css">
+
+  <style>
+    body { font-family: sans-serif; padding: 1em; }
+    #input, .CodeMirror { height: 150px; margin: 0.5em 0; width: 100%; }
+    .chunk { border: 1px solid #ccc; padding: 0.5em; margin: 0.5em 0; background: #f9f9f9; }
+    button { margin: 0.2em; padding: 0.5em 1em; }
+    .chunk-header { font-weight: bold; margin-bottom: 0.2em; }
+    .CodeMirror-gutters { width: 3em; }
+  </style>
+<!-- <<---HEAD BLOCK END>> -->
+
+<!-- <<HTML STRUCTURE BLOCK START>> -->
+  <h2>Paste GPT Output:</h2>
+  <textarea id="input" placeholder="Paste code with <<BLOCK START>> here..."></textarea>
+  <button onclick="parseChunks()">Parse Chunks</button>
+  <div id="controls"></div>
+  <h2>Chunks:</h2>
+  <div id="chunks"></div>
+<!-- <<---HTML STRUCTURE BLOCK END>> -->
+
+<!-- <<CHUNK PARSER BLOCK START>> -->
+    let chunks = [];
+    let editors = []; // CodeMirror instances
+
+    function parseChunks() {
+      console.log("parseChunks() called");
+      const input = document.getElementById("input").value;
+      console.log("Input text length:", input.length);
+      const lines = input.split("\n");
+      chunks = [];
+      let current = null;
+
+      for (let line of lines) {
+        const startMatch = line.match(/<<([A-Z\s]+) BLOCK START>>/);
+        const endMatch = line.match(/<<---([A-Z\s]+) BLOCK END>>/);
+
+        if (startMatch) {
+          console.log("Found START:", startMatch[1]);
+          current = { name: startMatch[1].trim(), code: [] };
+        } else if (endMatch && current) {
+          console.log("Found END:", endMatch[1]);
+          chunks.push(current);
+          current = null;
+        } else if (current) {
+          current.code.push(line);
+        }
+      }
+
+      console.log("Parsed chunks:", chunks);
+      renderChunks();
+    }
+<!-- <<---CHUNK PARSER BLOCK END>> -->
+
+<!-- <<RENDERER BLOCK START>> -->
+function renderChunks() {
+  console.log("Rendering chunks...");
+  const container = document.getElementById("chunks");
+  const controls = document.getElementById("controls");
+  container.innerHTML = "";
+  controls.innerHTML = "";
+  editors = [];
+
+  if (chunks.length === 0) {
+    console.log("No chunks found.");
+    return;
+  }
+
+  // Add "Copy ALL" button
+  const copyAllBtn = document.createElement("button");
+  copyAllBtn.textContent = "Copy ALL";
+  copyAllBtn.onclick = () => {
+    const fullText = editors.map(e => {
+      return `<!-- <<${e.name} BLOCK START>> -->\n` +
+             e.instance.getValue() +
+             `\n<!-- <<---${e.name} BLOCK END>> -->`;
+    }).join("\n\n");
+    copyToClipboard(fullText);
+  };
+  controls.appendChild(copyAllBtn);
+
+  const names = [...new Set(chunks.map(c => c.name))];
+  for (let name of names) {
+    const btn = document.createElement("button");
+    btn.textContent = `Copy ${name}`;
+    btn.onclick = () => {
+      const text = editors
+        .filter(e => e.name === name)
+        .map(e =>
+          `<!-- <<${e.name} BLOCK START>> -->\n` +
+          e.instance.getValue() +
+          `\n<!-- <<---${e.name} BLOCK END>> -->`
+        )
+        .join("\n\n");
+      copyToClipboard(text);
+    };
+    controls.appendChild(btn);
+  }
+
+  chunks.forEach(chunk => {
+    console.log("Rendering chunk:", chunk.name);
+    const div = document.createElement("div");
+    div.className = "chunk collapsed";
+    div.innerHTML = `
+      <div class="chunk-header" style="cursor:pointer;">${chunk.name} ▼</div>
+      <div class="editor-container" style="display:none;">
+        <div class="editor"></div>
+        <button class="copy-btn">Copy</button>
+        <button class="paste-btn">Paste</button>
+      </div>`;
+
+    const editorContainer = div.querySelector('.editor');
+    const cm = CodeMirror(editorContainer, {
+      value: chunk.code.join("\n"),
+      mode: "htmlmixed",
+      lineNumbers: true,
+      theme: "eclipse",
+      lineWrapping: true
+    });
+
+    // 💥 Delay initial refresh in case it's visible
+    setTimeout(() => {
+      cm.refresh();
+      console.log("Initial delayed refresh for:", chunk.name);
+    }, 0);
+
+    div.querySelector(".copy-btn").onclick = () => {
+      const wrapped = `<!-- <<${chunk.name} BLOCK START>> -->\n` +
+                      cm.getValue() +
+                      `\n<!-- <<---${chunk.name} BLOCK END>> -->`;
+      copyToClipboard(wrapped);
+    };
+
+    div.querySelector(".paste-btn").onclick = () => {
+      document.getElementById("input").value = cm.getValue();
+      console.log("Pasted chunk into textarea:", chunk.name);
+    };
+
+    // Toggle collapse/expand on header click
+    div.querySelector(".chunk-header").onclick = () => {
+      const container = div.querySelector(".editor-container");
+      const isVisible = container.style.display !== "none";
+      container.style.display = isVisible ? "none" : "block";
+      div.querySelector(".chunk-header").textContent = chunk.name + (isVisible ? " ▼" : " ▲");
+
+      if (!isVisible) {
+        // Refresh CM when expanding to fix blank content
+        setTimeout(() => {
+          cm.refresh();
+          console.log("Refreshed after expand for:", chunk.name);
+        }, 0);
+      }
+    };
+
+    editors.push({ name: chunk.name, instance: cm });
+    container.appendChild(div);
+  });
+}
+<!-- <<---RENDERER BLOCK END>> -->
+
+<!-- <<CLIPBOARD UTILITIES BLOCK START>> -->
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text)
+        .then(() => alert("Copied!"))
+        .catch(err => alert("Copy failed: " + err));
+    }
+<!-- <<---CLIPBOARD UTILITIES BLOCK END>> -->

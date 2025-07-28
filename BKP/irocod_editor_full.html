@@ -1,0 +1,259 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>iRocod Editor</title>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/monokai.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/eclipse.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/material.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/darcula.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/midnight.min.css">
+
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: sans-serif;
+      background: #1e1e1e;
+      color: #ccc;
+    }
+
+    header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: #333;
+      z-index: 10;
+      padding: 0.5em;
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+    }
+
+    #editor {
+      position: fixed;
+      top: 3em;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      overflow: auto;
+    }
+
+    .floating {
+      position: absolute;
+      width: 250px;
+      height: 200px;
+      background: rgba(60, 60, 60, 0.2);
+      color: white;
+      border: 1px solid #888;
+      padding: 0.5em;
+      z-index: 20;
+      backdrop-filter: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .floating textarea {
+      width: 100%;
+      height: calc(100% - 2em);
+      background: transparent;
+      color: white;
+      border: none;
+      resize: none;
+      outline: none;
+    }
+
+    .floating h4 {
+      margin: 0;
+      font-size: 0.9em;
+      cursor: move;
+    }
+
+    .floating.inactive {
+      opacity: 0.4;
+    }
+
+    #settingsPane {
+      background: #222;
+      padding: 0.5em;
+      border: 1px solid #555;
+      display: none;
+      position: absolute;
+      top: 3em;
+      left: 1em;
+      z-index: 15;
+    }
+
+    select {
+      background: #111;
+      color: white;
+      border: 1px solid #555;
+      padding: 0.2em;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <button onclick="copyOriginal()">Copy</button>
+  <button onclick="pasteToEditor()">Paste</button>
+  <button onclick="replaceText()">Replace</button>
+  <button onclick="undo()">Undo</button>
+  <button onclick="highlightClipboard()">Highlight</button>
+  <button onclick="toggleSettings()">⚙️</button>
+</header>
+
+<div id="settingsPane">
+  <label>Theme:
+    <select id="themeSelect" onchange="updateTheme()">
+      <option value="default">Default</option>
+      <option value="monokai">Monokai</option>
+      <option value="eclipse">Eclipse</option>
+      <option value="material">Material</option>
+      <option value="darcula">Darcula</option>
+      <option value="dracula">Dracula</option>
+      <option value="midnight">Midnight</option>
+    </select>
+  </label>
+  <br>
+  <label>Font Size:
+    <select id="fontSizeSelect" onchange="updateFontSize()">
+      <option value="6px">6px</option>
+      <option value="8px">8px</option>
+      <option value="10px">10px</option>
+      <option value="12px">12px</option>
+      <option value="14px" selected>14px</option>
+      <option value="16px">16px</option>
+      <option value="18px">18px</option>
+      <option value="20px">20px</option>
+      <option value="24px">24px</option>
+    </select>
+  </label>
+</div>
+
+<div id="editor"></div>
+
+<div id="floatCopy" class="floating inactive" style="top:60px; left:10px;">
+  <h4 onmousedown="startDrag(event, 'floatCopy')">Copy Under</h4>
+  <textarea></textarea>
+</div>
+
+<div id="floatReplace" class="floating inactive" style="top:60px; left:280px;">
+  <h4 onmousedown="startDrag(event, 'floatReplace')">Insert</h4>
+  <textarea></textarea>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/css/css.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/xml/xml.min.js"></script>
+
+<script>
+  let editor, lastValue = "";
+  let dragTarget = null, offsetX = 0, offsetY = 0;
+
+  editor = CodeMirror(document.getElementById("editor"), {
+    lineNumbers: true,
+    mode: "htmlmixed",
+    theme: "monokai",
+    lineWrapping: true
+  });
+
+  function copyOriginal() {
+    navigator.clipboard.writeText(editor.getValue());
+  }
+
+  function pasteToEditor() {
+    navigator.clipboard.readText().then(text => editor.setValue(text));
+  }
+
+  function undo() {
+    if (lastValue) editor.setValue(lastValue);
+  }
+
+  function replaceText() {
+    const replacement = document.querySelector("#floatReplace textarea").value;
+    const copyUnder = document.querySelector("#floatCopy textarea").value;
+
+    const orig = editor.getValue();
+    lastValue = orig;
+
+    if (copyUnder.trim()) {
+      const idx = orig.indexOf(copyUnder);
+      if (idx !== -1) {
+        const before = orig.slice(0, idx + copyUnder.length);
+        const after = orig.slice(idx + copyUnder.length);
+        editor.setValue(before + replacement + after);
+      }
+    } else {
+      const start = editor.getCursor("from");
+      const end = editor.getCursor("to");
+      editor.replaceRange(replacement, start, end);
+    }
+  }
+
+  function highlightClipboard() {
+    navigator.clipboard.readText().then(snippet => {
+      const text = editor.getValue();
+      const index = text.indexOf(snippet.trim());
+      if (index !== -1) {
+        const start = editor.posFromIndex(index);
+        const end = editor.posFromIndex(index + snippet.trim().length);
+        editor.setSelection(start, end);
+      }
+    });
+  }
+
+  function toggleSettings() {
+    const pane = document.getElementById("settingsPane");
+    pane.style.display = pane.style.display === "block" ? "none" : "block";
+  }
+
+  function updateTheme() {
+    const theme = document.getElementById("themeSelect").value;
+    editor.setOption("theme", theme);
+  }
+
+  function updateFontSize() {
+    const size = document.getElementById("fontSizeSelect").value;
+    editor.getWrapperElement().style.fontSize = size;
+    editor.refresh();
+  }
+
+  document.querySelectorAll(".floating").forEach(f => {
+    f.addEventListener("focusin", () => f.classList.remove("inactive"));
+    f.addEventListener("focusout", () => f.classList.add("inactive"));
+  });
+
+  function startDrag(e, id) {
+    dragTarget = document.getElementById(id);
+    offsetX = e.clientX - dragTarget.offsetLeft;
+    offsetY = e.clientY - dragTarget.offsetTop;
+    document.addEventListener("mousemove", dragMove);
+    document.addEventListener("mouseup", stopDrag);
+  }
+
+  function dragMove(e) {
+    if (!dragTarget) return;
+    dragTarget.style.left = (e.clientX - offsetX) + "px";
+    dragTarget.style.top = (e.clientY - offsetY) + "px";
+  }
+
+  function stopDrag() {
+    dragTarget = null;
+    document.removeEventListener("mousemove", dragMove);
+    document.removeEventListener("mouseup", stopDrag);
+  }
+</script>
+
+</body>
+</html>
