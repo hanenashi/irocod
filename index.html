@@ -3,25 +3,26 @@
 <head>
   <meta charset="UTF-8" />
   <title>iRocod Editor</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/monokai.min.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/eclipse.min.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/material.min.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/darcula.min.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/midnight.min.css">
+  <!-- CodeMirror core + themes -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/monokai.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/eclipse.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/material.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/darcula.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/midnight.min.css" />
 
   <style>
     html, body {
       margin: 0;
       padding: 0;
       height: 100%;
-    }
-
-    body {
-      font-family: sans-serif;
+      touch-action: none;
+      overflow: hidden;
       background: #1e1e1e;
+      font-family: sans-serif;
       color: #ccc;
     }
 
@@ -34,8 +35,9 @@
       z-index: 10;
       padding: 0.5em;
       display: flex;
-      align-items: center;
       gap: 0.5em;
+      align-items: center;
+      touch-action: none;
     }
 
     #editor {
@@ -47,7 +49,9 @@
     }
 
     .CodeMirror {
-      height: 100%;
+      height: 100% !important;
+      font-size: 14px;
+      touch-action: none;
     }
 
     .floating {
@@ -60,6 +64,7 @@
       padding: 0.5em;
       z-index: 20;
       transition: opacity 0.3s ease;
+      touch-action: none;
     }
 
     .floating textarea {
@@ -99,11 +104,16 @@
       border: 1px solid #555;
       padding: 0.2em;
     }
+
+    label {
+      display: block;
+      margin-top: 0.5em;
+    }
   </style>
 </head>
 <body>
 
-<header>
+<header id="topBar">
   <button onclick="copyOriginal()">Copy</button>
   <button onclick="pasteToEditor()">Paste</button>
   <button onclick="replaceText()">Replace</button>
@@ -116,7 +126,7 @@
   <label>Theme:
     <select id="themeSelect" onchange="updateTheme()">
       <option value="default">Default</option>
-      <option value="monokai">Monokai</option>
+      <option value="monokai" selected>Monokai</option>
       <option value="eclipse">Eclipse</option>
       <option value="material">Material</option>
       <option value="darcula">Darcula</option>
@@ -124,7 +134,6 @@
       <option value="midnight">Midnight</option>
     </select>
   </label>
-  <br>
   <label>Font Size:
     <select id="fontSizeSelect" onchange="updateFontSize()">
       <option value="6px">6px</option>
@@ -143,34 +152,51 @@
 <div id="editor"></div>
 
 <div id="floatCopy" class="floating inactive" style="top:60px; left:10px;">
-  <h4 onmousedown="startDrag(event, 'floatCopy')">Copy Under</h4>
+  <h4>Copy Under</h4>
   <textarea></textarea>
 </div>
 
 <div id="floatReplace" class="floating inactive" style="top:60px; left:280px;">
-  <h4 onmousedown="startDrag(event, 'floatReplace')">Insert</h4>
+  <h4>Insert</h4>
   <textarea></textarea>
 </div>
 
+<!-- Load CodeMirror core first -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+
+<!-- Load modes AFTER codemirror -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/javascript/javascript.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/htmlmixed/htmlmixed.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/css/css.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/xml/xml.min.js"></script>
 
 <script>
-  let editor, lastValue = "";
-  let dragTarget = null, offsetX = 0, offsetY = 0;
-
-  editor = CodeMirror(document.getElementById("editor"), {
+  let editor = CodeMirror(document.getElementById("editor"), {
     lineNumbers: true,
     mode: "htmlmixed",
     theme: "monokai",
     lineWrapping: true
   });
 
-  // Set initial font size
-  updateFontSize();
+  let fontSizePx = 14;
+  let lastValue = "";
+
+  function updateFontSize() {
+    const size = document.getElementById("fontSizeSelect").value;
+    fontSizePx = parseInt(size);
+    editor.getWrapperElement().style.fontSize = size;
+    editor.refresh();
+  }
+
+  function updateTheme() {
+    const theme = document.getElementById("themeSelect").value;
+    editor.setOption("theme", theme);
+  }
+
+  function toggleSettings() {
+    const pane = document.getElementById("settingsPane");
+    pane.style.display = pane.style.display === "block" ? "none" : "block";
+  }
 
   function copyOriginal() {
     navigator.clipboard.writeText(editor.getValue());
@@ -187,7 +213,6 @@
   function replaceText() {
     const replacement = document.querySelector("#floatReplace textarea").value;
     const copyUnder = document.querySelector("#floatCopy textarea").value;
-
     const orig = editor.getValue();
     lastValue = orig;
 
@@ -207,61 +232,76 @@
 
   function highlightClipboard() {
     navigator.clipboard.readText().then(snippet => {
-      const cleanSnippet = snippet.replace(/^\s+|\s+$/g, "").replace(/\r\n/g, "\n");
-      const fullText = editor.getValue().replace(/\r\n/g, "\n");
-      const index = fullText.indexOf(cleanSnippet);
+      const clean = snippet.trim().replace(/\r\n/g, "\n");
+      const full = editor.getValue().replace(/\r\n/g, "\n");
+      const index = full.indexOf(clean);
       if (index !== -1) {
-        const start = editor.posFromIndex(index);
-        const end = editor.posFromIndex(index + cleanSnippet.length);
-        editor.setSelection(start, end);
-      } else {
-        console.warn("Snippet not found.");
+        editor.setSelection(editor.posFromIndex(index), editor.posFromIndex(index + clean.length));
       }
     });
   }
 
-  function toggleSettings() {
-    const pane = document.getElementById("settingsPane");
-    pane.style.display = pane.style.display === "block" ? "none" : "block";
-  }
+  // Dragging for floating windows
+  let dragTarget = null, offsetX = 0, offsetY = 0;
 
-  function updateTheme() {
-    const theme = document.getElementById("themeSelect").value;
-    editor.setOption("theme", theme);
-  }
-
-  function updateFontSize() {
-    const size = document.getElementById("fontSizeSelect").value;
-    editor.getWrapperElement().style.fontSize = size;
-    editor.refresh();
-  }
-
-  // Floating window focus opacity
-  document.querySelectorAll(".floating textarea").forEach(t => {
-    t.addEventListener("focus", () => t.parentElement.classList.remove("inactive"));
-    t.addEventListener("blur", () => t.parentElement.classList.add("inactive"));
+  document.querySelectorAll(".floating h4").forEach(h => {
+    h.addEventListener("mousedown", e => startDrag(e, h.parentElement));
+    h.addEventListener("touchstart", e => startDrag(e, h.parentElement), { passive: false });
   });
 
-  // Drag logic
-  function startDrag(e, id) {
-    dragTarget = document.getElementById(id);
-    offsetX = e.clientX - dragTarget.offsetLeft;
-    offsetY = e.clientY - dragTarget.offsetTop;
+  function startDrag(e, target) {
+    dragTarget = target;
+    const point = e.touches?.[0] || e;
+    offsetX = point.clientX - dragTarget.offsetLeft;
+    offsetY = point.clientY - dragTarget.offsetTop;
+
     document.addEventListener("mousemove", dragMove);
     document.addEventListener("mouseup", stopDrag);
+    document.addEventListener("touchmove", dragMove, { passive: false });
+    document.addEventListener("touchend", stopDrag);
   }
 
   function dragMove(e) {
     if (!dragTarget) return;
-    dragTarget.style.left = (e.clientX - offsetX) + "px";
-    dragTarget.style.top = (e.clientY - offsetY) + "px";
+    e.preventDefault();
+    const point = e.touches?.[0] || e;
+    dragTarget.style.left = (point.clientX - offsetX) + "px";
+    dragTarget.style.top = (point.clientY - offsetY) + "px";
   }
 
   function stopDrag() {
     dragTarget = null;
     document.removeEventListener("mousemove", dragMove);
     document.removeEventListener("mouseup", stopDrag);
+    document.removeEventListener("touchmove", dragMove);
+    document.removeEventListener("touchend", stopDrag);
   }
+
+  // Slide gesture on header for font size
+  const header = document.getElementById("topBar");
+  let startX = null;
+
+  header.addEventListener("touchstart", e => {
+    if (e.touches.length === 1) startX = e.touches[0].clientX;
+  });
+
+  header.addEventListener("touchmove", e => {
+    if (startX === null) return;
+    const deltaX = e.touches[0].clientX - startX;
+    if (Math.abs(deltaX) > 30) {
+      fontSizePx += deltaX > 0 ? 1 : -1;
+      fontSizePx = Math.max(6, Math.min(32, fontSizePx));
+      editor.getWrapperElement().style.fontSize = fontSizePx + "px";
+      editor.refresh();
+      startX = e.touches[0].clientX;
+    }
+  });
+
+  header.addEventListener("touchend", () => {
+    startX = null;
+  });
+
+  updateFontSize();
 </script>
 
 </body>
